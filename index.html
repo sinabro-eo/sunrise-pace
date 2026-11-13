@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0d12">
+  <title>일출 산행 페이스</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="planView" class="view">
+    <header class="top">
+      <h1>일출 산행 페이스</h1>
+      <p class="sub">정상에 딱 맞춰 도착하도록 출발 시각과 페이스를 알려줘</p>
+    </header>
+
+    <section class="panel">
+      <div class="row2">
+        <label>산
+          <select id="mountain"></select>
+        </label>
+        <label>날짜
+          <input id="date" type="date">
+        </label>
+      </div>
+      <label>코스
+        <select id="course"></select>
+      </label>
+
+      <div class="field">
+        <span class="label">무엇에 맞출까</span>
+        <div class="seg" id="targetType" role="radiogroup" aria-label="목표">
+          <button type="button" role="radio" data-v="sunrise">일출</button>
+          <button type="button" role="radio" data-v="sunset">일몰</button>
+          <button type="button" role="radio" data-v="custom">직접 입력</button>
+        </div>
+      </div>
+      <label id="customWrap" hidden>정상 도착 시각
+        <input id="customTime" type="time" value="09:00">
+      </label>
+
+      <div class="row2">
+        <label id="bufferWrap">여유 도착
+          <select id="buffer">
+            <option value="0">정각에 도착</option>
+            <option value="5">5분 전</option>
+            <option value="10">10분 전</option>
+            <option value="15">15분 전</option>
+            <option value="20">20분 전</option>
+            <option value="30">30분 전</option>
+          </select>
+        </label>
+        <label>휴식 포함
+          <select id="rest">
+            <option value="0">없음</option>
+            <option value="5">5분</option>
+            <option value="10">10분</option>
+            <option value="15">15분</option>
+            <option value="20">20분</option>
+          </select>
+        </label>
+      </div>
+
+      <label>내 예상 등산 시간 (쉬는 시간 빼고, 분)
+        <input id="myMinutes" type="number" inputmode="numeric" min="20" max="600" step="1">
+      </label>
+      <p class="hint" id="paceHint"></p>
+    </section>
+
+    <section class="panel result" id="result" aria-live="polite">
+      <p class="label">출발 시각 <span id="departWhere"></span></p>
+      <p class="big" id="departTime">--:--</p>
+      <p class="line" id="targetLine"></p>
+      <p class="line muted" id="sunLine"></p>
+      <p class="warn" id="warn" hidden></p>
+      <ol class="cps" id="planCps"></ol>
+    </section>
+
+    <section class="actions">
+      <button id="startBtn" class="primary" type="button">산행 시작 (GPS 추적)</button>
+      <button id="simBtn" class="ghost" type="button">집에서 가상 산행으로 미리 보기</button>
+      <div id="simOpts" class="panel" hidden>
+        <label>가상 등산객의 실제 속도
+          <select id="simSpeed">
+            <option value="0.75">계획보다 25% 빠름 (지금까지의 상황)</option>
+            <option value="1">계획과 같음</option>
+            <option value="1.25">계획보다 25% 느림</option>
+          </select>
+        </label>
+        <label class="check"><input id="simFollow" type="checkbox" checked> 앱이 쉬라고 하면 쉬는 곳에서 쉰다</label>
+        <button id="simGo" class="primary" type="button">가상 산행 시작 (40배속)</button>
+      </div>
+      <button id="resumeBtn" class="ghost" type="button" hidden>진행 중이던 산행 이어가기</button>
+    </section>
+
+    <footer class="foot">
+      <p id="courseSource"></p>
+      <p>지도 데이터 © OpenStreetMap contributors. 시험판이라 안내가 틀릴 수 있어. 어두운 길에서는 화면보다 발밑이 먼저야.</p>
+    </footer>
+  </main>
+
+  <main id="hikeView" class="view" hidden>
+    <header class="hikeTop">
+      <span id="hikeCourse"></span>
+      <span id="simBadge" class="badge" hidden>가상 산행</span>
+    </header>
+
+    <section class="status" id="statusBox" aria-live="assertive">
+      <p class="headline" id="headline">GPS 신호 기다리는 중</p>
+      <p class="detail" id="detail">등산로 입구에서 잠시만 기다려줘.</p>
+    </section>
+
+    <div class="bar" aria-hidden="true"><div class="fill" id="barFill"></div><div id="barTicks"></div></div>
+    <p class="next" id="nextLine"></p>
+
+    <section class="stats">
+      <div><span class="label">도착 예상</span><b id="eta">--:--</b></div>
+      <div><span class="label">목표 도착</span><b id="target">--:--</b></div>
+      <div><span class="label">경과</span><b id="elapsed">0:00</b></div>
+      <div><span class="label">남은 거리</span><b id="remain">-</b></div>
+    </section>
+
+    <ol class="cps live" id="liveCps"></ol>
+    <p class="gps" id="gps"></p>
+
+    <section class="actions">
+      <button id="dimBtn" class="primary" type="button">화면 어둡게 (주머니용)</button>
+      <div class="row2">
+        <button id="voiceBtn" class="ghost" type="button">음성 안내 켜기</button>
+        <button id="arriveBtn" class="ghost" type="button">정상 도착</button>
+      </div>
+      <button id="quitBtn" class="ghost danger" type="button">산행 종료</button>
+    </section>
+  </main>
+
+  <main id="doneView" class="view" hidden>
+    <header class="top">
+      <h1 id="doneTitle">정상 도착</h1>
+      <p class="sub" id="doneSub"></p>
+    </header>
+    <section class="panel">
+      <ol class="cps live" id="doneCps"></ol>
+      <p class="line" id="doneTimes"></p>
+      <p class="hint" id="donePace"></p>
+      <button id="applyPace" class="primary" type="button" hidden>이 기록을 다음 계획에 반영</button>
+    </section>
+    <section class="actions">
+      <button id="backBtn" class="ghost" type="button">계획 화면으로</button>
+    </section>
+  </main>
+
+  <div id="dim" hidden>
+    <p id="dimHeadline"></p>
+    <p id="dimClock"></p>
+    <p class="dimHint">길게 눌러서 화면 켜기</p>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "일출 산행 페이스",
+  "short_name": "산행 페이스",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#0a0d12",
+  "theme_color": "#0a0d12",
+  "lang": "ko",
+  "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
