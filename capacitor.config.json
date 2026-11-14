@@ -1,0 +1,14 @@
+{
+  "appId": "io.github.sinabroeo.sunrisepace",
+  "appName": "산행 페이스",
+  "webDir": "dist",
+  "android": {
+    "useLegacyBridge": true
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_pace",
+      "iconColor": "#FFB454"
+    }
+  }
+}

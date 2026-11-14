@@ -11,6 +11,8 @@ const dur = (sec) => {
   const m = Math.floor((s % 3600) / 60);
   return h ? `${h}:${String(m).padStart(2, '0')}` : `${m}:${String(s % 60).padStart(2, '0')}`;
 };
+// 안드로이드 앱(APK) 안에서만 존재한다. 있으면 화면이 꺼져도 도는 추적과 잠금화면 알림을 쓴다.
+const native = window.NativeBridge || null;
 const store = {
   get(key, fallback) { try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 저장 불가 환경이면 그냥 넘어간다 */ } },
@@ -142,7 +144,7 @@ function show(view) {
 
 function startHike({ sim }) {
   if (!model || !plan) return;
-  if (!sim && !('geolocation' in navigator)) { alertBox('이 브라우저는 위치 추적을 지원하지 않아.'); return; }
+  if (!sim && !native && !('geolocation' in navigator)) { alertBox('이 브라우저는 위치 추적을 지원하지 않아.'); return; }
   const startMs = sim ? plan.departMs : Date.now();
   const session = new HikeSession(model, { targetMs: plan.targetMs, paceFactor: settings.factor, startMs });
   hike = { session, sim, lastKey: '', lastAlertMs: 0, voice: false, planCps: plan.checkpoints, simNow: startMs, courseId: settings.courseId };
@@ -168,15 +170,46 @@ function beginTracking() {
   $('barTicks').innerHTML = model.checkpoints.slice(1, -1).map((c) => `<i style="left:${(c.t / model.totalSec) * 100}%"></i>`).join('');
   $('voiceBtn').textContent = '음성 안내 켜기';
   $('arriveBtn').hidden = hike.sim;
-  $('voiceBtn').hidden = hike.sim;
-  $('dimBtn').hidden = hike.sim;
+  $('voiceBtn').hidden = hike.sim || !('speechSynthesis' in window);
+  $('dimBtn').hidden = hike.sim || !!native; // 앱에서는 그냥 화면을 끄면 된다
   show('hikeView');
-  if (!hike.sim) {
+  if (!hike.sim && native) {
+    startNativeWatch();
+  } else if (!hike.sim) {
     keepAwake();
     hike.watchId = navigator.geolocation.watchPosition(onFix, onGeoError, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
   }
   hike.timer = setInterval(tick, 1000);
   tick();
+}
+
+// 앱: 백그라운드 위치 서비스로 추적한다. 화면을 꺼도 위치가 계속 들어온다.
+async function startNativeWatch() {
+  const current = hike;
+  try {
+    await native.notifications.requestPermissions();
+    await native.notifications.createChannel({ id: 'pace', name: '페이스 안내', description: '쉬어도 될 때, 출발할 때, 늦을 때 알림', importance: 4, vibration: true, visibility: 1 });
+  } catch { /* 알림을 못 써도 추적은 계속한다 */ }
+  if (hike !== current) return;
+  try {
+    const id = await native.geo.addWatcher(
+      { backgroundTitle: '산행 페이스 추적 중', backgroundMessage: '화면을 꺼도 페이스를 계속 확인하고 있어.', requestPermissions: true, stale: false, distanceFilter: 0 },
+      (loc, err) => {
+        if (hike !== current) return;
+        if (err || !loc) {
+          hike.geoError = err && err.code === 'NOT_AUTHORIZED' ? '위치 권한이 꺼져 있어. 설정에서 이 앱의 위치 사용을 허용해줘.' : 'GPS 신호를 못 잡고 있어. 하늘이 트인 곳에서 잠시 기다려줘.';
+          return;
+        }
+        hike.geoError = null;
+        hike.session.update({ lat: loc.latitude, lon: loc.longitude, acc: loc.accuracy, ms: loc.time || Date.now() });
+        // 화면이 꺼지면 타이머가 느려지므로, 위치가 들어올 때마다 직접 판정한다
+        if (Date.now() - (hike.pulseMs || 0) >= 3000) { hike.pulseMs = Date.now(); tick(); }
+      },
+    );
+    if (hike === current) hike.nativeWatchId = id; else native.geo.removeWatcher({ id });
+  } catch {
+    if (hike === current) hike.geoError = '위치 추적을 시작하지 못했어. 위치 권한을 확인해줘.';
+  }
 }
 
 function onFix(pos) {
@@ -226,7 +259,12 @@ function notify(advice) {
   const urgent = advice.key === 'go' || advice.key === 'finished';
   if (!urgent && Date.now() - hike.lastAlertMs < 20000) return;
   hike.lastAlertMs = Date.now();
-  try { navigator.vibrate?.(urgent ? [400, 150, 400, 150, 400] : [200, 100, 200]); } catch { /* 진동 미지원 */ }
+  if (native) {
+    // 같은 번호로 올리면 이전 알림을 덮어써서, 잠금화면에는 항상 최신 안내 하나만 남는다
+    native.notifications.schedule({ notifications: [{ id: 1, title: advice.headline, body: advice.detail, channelId: 'pace', smallIcon: 'ic_stat_pace' }] }).catch(() => {});
+  } else {
+    try { navigator.vibrate?.(urgent ? [400, 150, 400, 150, 400] : [200, 100, 200]); } catch { /* 진동 미지원 */ }
+  }
   if (hike.voice && 'speechSynthesis' in window) {
     const u = new SpeechSynthesisUtterance(`${advice.headline}. ${advice.detail}`);
     u.lang = 'ko-KR';
@@ -263,7 +301,7 @@ function renderHike(st, advice, now, waiting) {
   const used = Math.round(st.factorUsed * 100);
   $('gps').textContent = hike.sim
     ? `가상 산행 ${SIM_SPEED}배속 · 지금 시각 ${hhmm(now)} · 판정에 쓰는 속도 ${used}%`
-    : hike.geoError || (st.acc == null ? '' : `GPS 오차 ±${Math.round(st.acc)}m · 판정에 쓰는 속도 표준의 ${used}%${wakeLock ? '' : ' · 화면이 꺼지면 추적이 멈춰'}`);
+    : hike.geoError || (st.acc == null ? '' : `GPS 오차 ±${Math.round(st.acc)}m · 판정에 쓰는 속도 표준의 ${used}%${native ? ' · 화면을 꺼도 추적돼' : wakeLock ? '' : ' · 화면이 꺼지면 추적이 멈춰'}`);
   if (!$('dim').hidden) {
     $('dimHeadline').textContent = advice.headline;
     $('dimClock').textContent = `${hhmm(now)} · 도착 예상 ${waiting ? '--:--' : hhmm(st.etaMs)}`;
@@ -274,6 +312,7 @@ function stopTracking() {
   if (!hike) return;
   clearInterval(hike.timer);
   if (hike.watchId != null) navigator.geolocation.clearWatch(hike.watchId);
+  if (hike.nativeWatchId != null) native.geo.removeWatcher({ id: hike.nativeWatchId }).catch(() => {});
   try { wakeLock?.release(); } catch { /* 무시 */ }
   $('dim').hidden = true;
 }
@@ -351,4 +390,8 @@ fillMountains();
 bindPlan();
 bindHike();
 renderPlan();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if (native) {
+  $('startBtn').textContent = '산행 시작 (화면 꺼도 추적)';
+} else if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}

@@ -1,0 +1,54 @@
+# main에 올릴 때마다 안드로이드 설치 파일(APK)을 만들어 Releases에 올린다.
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install
+        run: npm ci
+
+      - name: Check pace logic
+        run: npm test
+
+      - name: Copy web files into the Android project
+        run: npm run sync
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Publish APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk sunrise-pace.apk
+          gh release delete apk --yes --cleanup-tag || true
+          gh release create apk sunrise-pace.apk \
+            --target "${{ github.sha }}" \
+            --title "산행 페이스 APK (빌드 ${{ github.run_number }})" \
+            --notes "안드로이드 폰에서 sunrise-pace.apk를 받아 설치하면 된다. 시험판이다."
