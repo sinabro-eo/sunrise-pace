@@ -46,7 +46,7 @@ function fillCourses() {
   if (!mountain.courses.some((c) => c.id === settings.courseId)) settings.courseId = mountain.courses[0]?.id || null;
   $('course').value = settings.courseId;
   model = settings.courseId ? buildModel(findCourse(settings.courseId).course) : null;
-  $('myMinutes').value = model ? Math.round(model.course.standardMinutes * settings.factor) : '';
+  $('myMinutes').value = model ? Math.round(model.standardMinutes * settings.factor) : '';
 }
 
 function targetInfo() {
@@ -97,8 +97,8 @@ function renderPlan() {
 
   $('planCps').innerHTML = plan.checkpoints.map((c) => `<li><span class="n">${c.name}${c.restMin ? ` · 휴식 ${c.restMin}분` : ''}</span><span class="t">${hhmm(c.arriveMs)}</span><span class="x">${(c.s / 1000).toFixed(2)}km</span></li>`).join('');
   const pct = Math.round(settings.factor * 100);
-  $('paceHint').textContent = `표준 ${course.standardMinutes}분 기준 ${pct}% 속도로 계산해. 한 번 다녀오면 실제 기록으로 자동 보정할 수 있어.`;
-  $('courseSource').textContent = `표준 시간 출처: ${course.standardSource}. ${course.entry ? course.entry.note + '.' : ''} 방문 전 국립공원공단 공지를 확인해.`;
+  $('paceHint').textContent = `표준 ${model.standardMinutes}분 기준 ${pct}% 속도로 계산해. 한 번 다녀오면 실제 기록으로 자동 보정할 수 있어.`;
+  $('courseSource').textContent = `표준 시간 ${model.standardMinutes}분: ${course.standardSource}. ${course.entry ? course.entry.note + '. ' : ''}${course.notice || ''}`;
   $('resumeBtn').hidden = !store.get('active', null);
 }
 
@@ -119,7 +119,7 @@ function bindPlan() {
   $('rest').addEventListener('change', (e) => { settings.restMin = Number(e.target.value); renderPlan(); });
   $('myMinutes').addEventListener('change', (e) => {
     const v = Number(e.target.value);
-    if (model && v >= 20 && v <= 600) { settings.factor = v / model.course.standardMinutes; renderPlan(); }
+    if (model && v >= 10 && v <= 600) { settings.factor = v / model.standardMinutes; renderPlan(); }
   });
   $('startBtn').addEventListener('click', () => startHike({ sim: false }));
   $('simBtn').addEventListener('click', () => { $('simOpts').hidden = !$('simOpts').hidden; });
@@ -332,7 +332,7 @@ function finishHike(st) {
   const usable = !done.sim && factor > 0.4 && factor < 2.5;
   $('donePace').textContent = done.sim
     ? '가상 산행이라 기록은 저장하지 않았어.'
-    : `이번 걸은 시간은 표준 ${model.course.standardMinutes}분의 ${Math.round(factor * 100)}%야. 반영하면 다음 출발 시각이 이 속도로 계산돼.`;
+    : `이번 걸은 시간은 표준 ${model.standardMinutes}분의 ${Math.round(factor * 100)}%야. 반영하면 다음 출발 시각이 이 속도로 계산돼.`;
   $('applyPace').hidden = !usable;
   $('applyPace').onclick = () => { settings.factor = factor; fillCourses(); renderPlan(); show('planView'); };
   if (!done.sim) {

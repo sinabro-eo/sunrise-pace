@@ -2,7 +2,7 @@
 
 일출·일몰 시각에 맞춰 정상에 도착하도록 출발 시각을 계산하고, 산행 중에는 GPS로 페이스를 판정해 "쉬어도 돼 / 딱 맞아 / 늦어"를 알려주는 웹 시험판.
 
-- 지금 들어 있는 코스: 북한산 도선사 코스 (백운대탐방지원센터 → 백운대)
+- 지금 들어 있는 코스: 북한산 도선사 코스 (백운대탐방지원센터 → 백운대), 북악산 창의문 코스 (창의문안내소 → 백악마루)
 - 안드로이드 앱: https://github.com/sinabro-eo/sunrise-pace/releases/latest/download/sunrise-pace.apk
   화면을 꺼도 추적하고, 안내는 잠금화면 알림과 진동으로 온다.
 - 웹: https://sinabro-eo.github.io/sunrise-pace/ (저장소 Settings → Pages에서 main 브랜치를 켜야 열린다)
@@ -24,4 +24,5 @@
 
 - 경로 좌표: OpenStreetMap 등산로를 BRouter로 이은 선. © OpenStreetMap contributors (ODbL)
 - 표준 시간: 서울관광재단 북한산 백운대 코스 안내 (1.9km, 약 1시간 30분)
+- 북악산 창의문 코스는 구간만의 공식 시간이 없어, 북한산 코스에서 구한 비율로 추정한다 (`STANDARD_SCALE`)
 - 구간별 시간 배분은 거리와 오르막으로 추정한 값이고 실측이 아니다.

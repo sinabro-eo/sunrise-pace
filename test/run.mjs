@@ -1,7 +1,7 @@
 // node test/run.mjs — 계산 로직 점검
 import { MOUNTAINS } from '../js/courses.js';
 import { sunTimes } from '../js/sun.js';
-import { buildModel, computePlan, HikeSession, SimHiker, advise, snap } from '../js/pace.js';
+import { buildModel, computePlan, HikeSession, SimHiker, advise, snap, STANDARD_SCALE } from '../js/pace.js';
 
 let failed = 0;
 const check = (name, ok, info = '') => {
@@ -11,6 +11,7 @@ const check = (name, ok, info = '') => {
 const kst = (ms) => new Date(ms + 9 * 3600000).toISOString().slice(11, 16);
 const course = MOUNTAINS[0].courses[0];
 const model = buildModel(course);
+const defaultModel = model;
 
 // 1) 경로 데이터 옮겨 적기 오류 점검: 원본(BRouter)에서 받은 누적 거리와 비교
 const srcCum = [0, 26, 41, 54, 144, 161, 189, 201, 210, 247, 266, 293, 312, 329, 354, 440, 480, 493, 505, 516, 538, 569, 602, 626, 629, 666, 678, 689, 747, 766, 814, 852, 903, 927, 941, 953, 968, 1003, 1016, 1053, 1067, 1097, 1112, 1200, 1242, 1272, 1289, 1309, 1348, 1374, 1401, 1424, 1435, 1452, 1463, 1477, 1479, 1490, 1503, 1515, 1541, 1576, 1604, 1629, 1642, 1665, 1696, 1706, 1713, 1730, 1742, 1766, 1816, 1829, 1862, 1898, 1916, 1928, 1940];
@@ -61,7 +62,8 @@ const sp = computePlan(model, { targetMs: summer.sunrise - 15 * 60000, factor: 1
 check('하지 일출은 입산 04:00 제한에 걸림', sp.tooEarly && sp.lateBySec > 0, `필요 출발 ${kst(sp.departMs)}, 04:00 출발 시 ${Math.round(sp.lateBySec / 60)}분 늦음`);
 
 // 4) 가상 산행
-function run({ trueFactor, planFactor, followAdvice, restMin = 0, label }) {
+function run({ trueFactor, planFactor, followAdvice, restMin = 0, label, model: useModel }) {
+  const model = useModel || defaultModel;
   const p = computePlan(model, { targetMs: target, factor: planFactor, restMin });
   const session = new HikeSession(model, { targetMs: target, paceFactor: planFactor, startMs: p.departMs });
   const hiker = new SimHiker(model, { trueFactor, startMs: p.departMs, followAdvice });
@@ -102,6 +104,31 @@ check('알림이 깜빡이지 않음(산행당 12회 이하)', [base, guided, on
 const pk = model.pts[model.pts.length - 4];
 const hit = snap(model, pk.lat, pk.lon, pk.s - 5);
 check('정상부 위치 붙이기', Math.abs(hit.s - pk.s) < 3, `오차 ${Math.abs(hit.s - pk.s).toFixed(1)}m`);
+
+
+// 6) 북악산 창의문 코스
+const bugak = MOUNTAINS.find((m) => m.id === 'bugaksan').courses[0];
+const bm = buildModel(bugak);
+check('보정값이 북한산 공식 시간에서 나온 값과 일치', Math.abs(model.rawScale - STANDARD_SCALE) / STANDARD_SCALE < 0.005, `북한산 ${model.rawScale.toFixed(4)} vs ${STANDARD_SCALE}`);
+const bSrc = [0, 5, 11, 27, 102, 177, 246, 257, 311, 361, 402, 430, 439, 457, 506, 526, 536, 562, 624, 647, 653, 690, 698, 726, 740, 749, 757, 778, 796];
+let bShort = 0;
+let bOver = 0;
+check('북악산 경로 점 개수', bm.pts.length === bSrc.length, `${bm.pts.length}개`);
+for (let i = 1; i < bm.pts.length; i++) {
+  const mine = bm.pts[i].s - bm.pts[i - 1].s;
+  const src = bSrc[i] - bSrc[i - 1];
+  bShort = Math.max(bShort, src - mine);
+  bOver = Math.max(bOver, mine - src);
+}
+check('북악산 구간 길이가 원본과 일치', bShort <= 6 && bOver <= 1.5, `최대 -${bShort.toFixed(1)}m / +${bOver.toFixed(1)}m, 총 ${bm.totalDist.toFixed(0)}m (원본 796m)`);
+check('북악산 정상 고도 342m, 표준 시간 30~40분', Math.abs(bm.pts.at(-1).ele - 342) < 1 && bm.standardMinutes >= 30 && bm.standardMinutes <= 40, `표준 ${bm.standardMinutes}분, 오르막 ${bm.ascent.toFixed(0)}m`);
+const bPlan = computePlan(bm, { targetMs: target, factor: 1, restMin: 0, entryOpenMs: null });
+check('북악산은 입산 시간 제한 없이 계획', !bPlan.tooEarly && bPlan.departMs === target - bm.standardMinutes * 60000, `출발 ${kst(bPlan.departMs)}`);
+const bA = run({ model: bm, trueFactor: 0.75, planFactor: 1, followAdvice: false, label: '[북악산 A] 계획보다 25% 빠른 사람, 안내 무시' });
+const bB = run({ model: bm, trueFactor: 0.75, planFactor: 1, followAdvice: true, label: '[북악산 B] 같은 사람, 안내대로 쉼' });
+check('북악산 B: 안내대로 쉬면 안내 없을 때보다 덜 일찍, 늦지는 않게 도착', bB.finished && bB.diffMin >= 0 && bB.diffMin < bA.diffMin, `안내 없이 ${bA.diffMin.toFixed(1)}분 일찍 → 안내대로 ${bB.diffMin.toFixed(1)}분 일찍`);
+const bD = run({ model: bm, trueFactor: 1.25, planFactor: 1, followAdvice: true, label: '[북악산 D] 계획보다 25% 느린 사람' });
+check('북악산 D: 늦는 페이스를 도착 전에 알림', bD.firstBehind != null && bD.firstBehind < 0.8, bD.firstBehind == null ? '알림 없음' : `진행 ${(bD.firstBehind * 100).toFixed(0)}% 지점`);
 
 console.log(failed ? `\n${failed}개 실패` : '\n전부 통과');
 process.exit(failed ? 1 : 0);

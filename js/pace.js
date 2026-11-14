@@ -19,6 +19,9 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const SEC_PER_M_FLAT = 0.72;
 const SEC_PER_M_UP = 6;
 const SEC_PER_M_DOWN = 1.2;
+// 공식 표준 시간이 없는 코스에 쓰는 보정값. 북한산 도선사 코스(공식 90분)에서 위 규칙의 계산값과
+// 공식 시간의 비율을 구한 것이다. 같은 기준으로 맞춰야 내 속도 계수가 산이 바뀌어도 통한다.
+export const STANDARD_SCALE = 1.075;
 
 export function buildModel(course) {
   const pts = course.points.map(([lat, lon, ele]) => ({ lat, lon, ele }));
@@ -51,9 +54,11 @@ export function buildModel(course) {
     const w = d * SEC_PER_M_FLAT + Math.max(dz, 0) * SEC_PER_M_UP + Math.max(-dz, 0) * SEC_PER_M_DOWN;
     pts[i].t = pts[i - 1].t + w * factorAt((pts[i].s + pts[i - 1].s) / 2);
   }
-  const scale = (course.standardMinutes * 60) / pts[pts.length - 1].t;
-  for (const p of pts) p.t *= scale;
-  model.totalSec = course.standardMinutes * 60;
+  const rawSec = pts[pts.length - 1].t;
+  model.standardMinutes = course.standardMinutes ?? Math.round((rawSec * STANDARD_SCALE) / 60);
+  model.rawScale = (model.standardMinutes * 60) / rawSec;
+  for (const p of pts) p.t *= model.rawScale;
+  model.totalSec = model.standardMinutes * 60;
   model.ascent = ascent;
 
   model.checkpoints = course.checkpoints.map((c) => {
